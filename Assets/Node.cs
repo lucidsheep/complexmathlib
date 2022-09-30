@@ -4,17 +4,18 @@ using ComplexMathLib;
 
 public class Node : MonoBehaviour
 {
-	public enum Type { Control, Adder, Multiplier, Pole, Zero }
+	public enum Type { Control, Adder, Multiplier, Pole, Zero, Anchor, Constant }
 	public ComplexNumber value;
 	public SpriteRenderer sprite;
 	public SpriteRenderer outline;
+	public int touchID = -1;
 
 	ComplexNumber cachedValue;
-	Type type = Type.Control;
+	public Type type = Type.Control;
 	List<Node> sources = new List<Node>();
 	bool beingDragged = false;
 
-	public bool canBeControlled { get { return type == Type.Zero || type == Type.Control || type == Type.Pole; } }
+	public bool canBeControlled { get { return type == Type.Zero || type == Type.Control || type == Type.Pole || type == Type.Anchor || type == Type.Constant; } }
 	// Use this for initialization
 	void Awake()
 	{
@@ -31,13 +32,10 @@ public class Node : MonoBehaviour
 		{
 			if(beingDragged)
             {
-				Vector3 newTarget = Input.mousePosition;
-				var newPos = Camera.main.ScreenToWorldPoint(newTarget);
-				value = new ComplexNumber(newPos.x, newPos.y);
-				if (type == Type.Pole) Plotter.poleMoved = true;
-				else if (type == Type.Zero) Plotter.zeroMoved = true;
+				OnNodeMoved(Input.mousePosition);
 			}
-
+			if (Input.GetMouseButtonUp(0))
+				OnMouseRelease();
 		} else if(type == Type.Adder)
         {
 			value = new ComplexNumber();
@@ -57,17 +55,56 @@ public class Node : MonoBehaviour
 		}
 	}
 
+	public void OnNodeMoved(Vector2 screenPosition)
+    {
+		var newPos = Camera.main.ScreenToWorldPoint(screenPosition);
+		value = new ComplexNumber(newPos.x, newPos.y);
+		if (type == Type.Pole) Plotter.poleMoved = true;
+		else if (type == Type.Zero) Plotter.zeroMoved = true;
+		else if (type == Type.Anchor) Plotter.anchorMoved = true;
+		else if (type == Type.Constant) Plotter.constantMoved = true;
+	}
     private void OnMouseDown()
     {
-		if (canBeControlled)
-			beingDragged = true;
+		if (Plotter.USE_TOUCH_INPUT)
+			return;
+
+		SetDragged(true);
     }
 
-    private void OnMouseUp()
+    private void OnMouseRelease()
     {
-		beingDragged = false;
+		if (Plotter.USE_TOUCH_INPUT)
+			return;
+		if(beingDragged)
+			SetDragged(false);
     }
-    public Vector3 position
+
+	public void SetVisible(bool visible)
+    {
+		sprite.enabled = outline.enabled = visible;
+    }
+
+	public void SetDragged(bool newDrag)
+    {
+		if(canBeControlled)
+			beingDragged = newDrag;
+		if (!newDrag && Mathf.Max(Mathf.Abs(transform.position.x), Mathf.Abs(transform.position.y)) > .8f)
+		{
+			//remove nodes dragged out of canvas
+			Plotter.RemoveNodeFromDrag(this);
+		}
+	}
+
+	public void SetDragged(bool newDrag, Vector2 initPosition)
+	{
+		SetDragged(newDrag);
+		if (newDrag)
+			OnNodeMoved(initPosition);
+
+	}
+
+	public Vector3 position
     {
         get
         {

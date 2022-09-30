@@ -5,8 +5,13 @@ using UnityEngine.UI;
 
 public class Plotter : MonoBehaviour
 {
+	public static bool USE_TOUCH_INPUT = false;
+
+	static Plotter instance;
+
 	public enum PixelStyle { Fill, Circles, Squares }
-	public ComputeShader plotShader;
+	public SpriteRenderer graph;
+	Material shader { get { return graph.material; } }
 	public Node nodeTemplate;
 	public Line lineTemplate;
 	public Color[] colors;
@@ -21,34 +26,35 @@ public class Plotter : MonoBehaviour
 	public int pixelZoomLevel = 1;
 	[Range(0, 10)]
 	public int contourLevel = 0;
+	public bool useTexture = false;
 	public PixelStyle pixelStyle = PixelStyle.Fill;
 
+	bool[] touchesDown;
 	int lastZoom;
 	int lastContour;
 	PixelStyle lastStyle;
+	Node anchorNode;
+	Node constantNode;
 
 	ComputeBuffer poleBuffer, zeroBuffer;
 	Texture2D oldTex;
 	public static bool poleMoved = false;
 	public static bool zeroMoved = false;
+	public static bool anchorMoved = false;
+	public static bool constantMoved = false;
 	public static int maxNodes = 8;
-	// Use this for initialization
-	void Start()
-	{
 
+    private void Awake()
+    {
+		instance = this;
+    }
+    void Start()
+	{
 		ComplexNumber x = new ComplexNumber(); //r = 0; i = 0;
 		ComplexNumber y = new ComplexNumber(3f, -1f); //r = 3 i = -1
 		ComplexNumber z = 3f; //r = 3f i = 0
 		z.i = 5f;
 		z.Pow(2);
-		Debug.Log(z.ToString());
-		Debug.Log(z);
-		Debug.Log("complex numbers\nA= " + A + "\nB= " + B + "\nC= " + C);
-		Debug.Log("A+B= " + (A + B) + "\nB+C= " + (B + C));
-		Debug.Log("A-B= " + (A - B) + "\nB-C= " + (B - C));
-		Debug.Log("A*B= " + (A * B) + "\nB*C= " + (B * C));
-		Debug.Log("A/B= " + (A / B) + "\nB/C= " + (B / C));
-		Debug.Log("C^3= " + C.Pow(3));
 
 		zeroes = new List<Node>();
 		poles = new List<Node>();
@@ -63,28 +69,72 @@ public class Plotter : MonoBehaviour
 		lastZoom = pixelZoomLevel;
 		lastContour = contourLevel;
 		lastStyle = pixelStyle;
+		touchesDown = new bool[10];
+		for (int i = 0; i < 10; i++)
+			touchesDown[i] = false;
+
+		if (!USE_TOUCH_INPUT)
+			CreateNode(Node.Type.Zero);
 	}
 
 	private void Update()
 	{
-		bool zero = Input.GetKeyDown(KeyCode.Z);
-		bool pole = Input.GetKeyDown(KeyCode.P);
+		bool zero = false;
+		bool pole = false;
 		bool zoom = lastZoom != pixelZoomLevel;
 		bool contour = lastContour != contourLevel;
-		bool style = lastStyle != pixelStyle; 
-		Color colToUse = zero ? colors[0] : colors[1];
-		if (pole || zero)
+		bool style = lastStyle != pixelStyle;
+		if (USE_TOUCH_INPUT)
 		{
-			if (pole && poles.Count >= maxNodes) return;
-			if (zero && zeroes.Count >= maxNodes) return;
-
-			var node = Instantiate(nodeTemplate);
-			node.sprite.color = colToUse;
-			node.SetType(pole ? Node.Type.Pole : Node.Type.Zero);
-			if (pole)
-				poles.Add(node);
-			else
-				zeroes.Add(node);
+			Dictionary<int, Node> existingTouches = new Dictionary<int, Node>();
+			foreach (var n in zeroes)
+				existingTouches.Add(n.touchID, n);
+			foreach (var n in poles)
+				existingTouches.Add(n.touchID, n);
+			foreach (var touch in Input.touches)
+			{
+				var node = existingTouches.ContainsKey(touch.fingerId) ? existingTouches[touch.fingerId] : null;
+				if (node == null)
+				{ // new touch
+					bool isZero = existingTouches.Count == 0 ? true : touch.position.x < (Screen.height / 2); //first touch is always a zero
+					node = CreateNode(isZero ? Node.Type.Zero : Node.Type.Pole, touch.fingerId);
+					zero = isZero ? true : zero;
+					pole = isZero ? pole : true;
+					node.OnNodeMoved(touch.position);
+					//existingTouches.Add(touch.fingerId, node);
+				}
+				
+				if (touch.phase == TouchPhase.Ended || touch.phase == TouchPhase.Canceled)
+				{
+					pole = node.type == Node.Type.Pole ? true : pole;
+					zero = node.type == Node.Type.Zero ? true : zero;
+					existingTouches.Remove(node.touchID);
+					RemoveNode(node);
+					
+				}
+				else if (touch.phase == TouchPhase.Moved || touch.phase == TouchPhase.Stationary)
+				{
+					//Debug.Log("Moved");
+					node.OnNodeMoved(touch.position);
+					existingTouches.Remove(node.touchID);
+				}
+			}
+			//anything left in existingTouches is a stale node and should be removed
+			foreach(var kv in existingTouches)
+            {
+				pole = kv.Value.type == Node.Type.Pole ? true : pole;
+				zero = kv.Value.type == Node.Type.Zero ? true : zero;
+				RemoveNode(kv.Value);
+            }
+		}
+		else
+		{
+			zero = Input.GetKeyDown(KeyCode.Z);
+			pole = Input.GetKeyDown(KeyCode.P);
+			if (pole || zero)
+			{
+				CreateNode(zero ? Node.Type.Zero : Node.Type.Pole);
+			}
 		}
 		if (poleMoved || pole)
 			UpdateBuffer(false);
@@ -96,39 +146,77 @@ public class Plotter : MonoBehaviour
 			lastContour = contourLevel;
 		if (style)
 			lastStyle = pixelStyle;
-		if (poleMoved || zeroMoved || pole || zero || zoom || contour || style)
+		if (poleMoved || zeroMoved || anchorMoved || constantMoved ||  pole || zero || zoom || contour || style)
 		{
-			poleMoved = zeroMoved = false;
-			plotShader.SetInt("InputSize", resolution);
-			plotShader.SetBuffer(0, "Poles", poleBuffer);
-			plotShader.SetBuffer(0, "Zeroes", zeroBuffer);
-			plotShader.SetInt("NumZeroes", zeroes.Count);
-			plotShader.SetInt("NumPoles", poles.Count);
-			plotShader.SetInt("PixelZoom", Mathf.FloorToInt(Mathf.Pow(2f, pixelZoomLevel - 1)));
-			plotShader.SetInt("PixelStyle", (int)pixelStyle);
-			plotShader.SetFloat("Contours", contourLevel == 0 ? 0f : 2f - ((contourLevel - 1) * .1f));
-			RenderTexture tex = new RenderTexture(resolution, resolution, 24);
-			Texture2D tex2d = new Texture2D(resolution, resolution, TextureFormat.RGB24, false);
-			tex.enableRandomWrite = true;
-			tex.Create();
-			plotShader.SetTexture(0, "Output", tex);
-			plotShader.Dispatch(0, resolution, resolution, 1);
-
-			RenderTexture.active = tex;
-			tex2d.ReadPixels(new Rect(0, 0, tex.width, tex.height), 0, 0);
-			tex2d.Apply();
-			RenderTexture.active = null;
-			graphPixels.texture = tex2d;
-
-			tex.Release();
-			if (oldTex != null) Destroy(oldTex);
-			oldTex = tex2d;
-		}
+			poleMoved = zeroMoved = anchorMoved = constantMoved = false;
+			shader.SetInteger("InputSize", resolution);
+			shader.SetFloatArray("Poles", GetBufferArray(false));
+			shader.SetFloatArray("Zeroes", GetBufferArray(true));
+			shader.SetInt("NumZeroes", zeroes.Count);
+			shader.SetInt("NumPoles", poles.Count);
+			shader.SetInt("PixelZoom", Mathf.FloorToInt(Mathf.Pow(2f, pixelZoomLevel - 1)));
+			shader.SetInt("PixelStyle", (int)pixelStyle);
+			shader.SetInt("UseTexture", useTexture ? 1 : 0);
+			shader.SetFloat("Contours", contourLevel == 0 ? 0f : 2f - ((contourLevel - 1) * .1f));
+			if (anchorNode != null)
+				shader.SetVector("Anchor", new Vector4(anchorNode.transform.position.x, anchorNode.transform.position.y, 0f));
+			else
+				shader.SetVector("Anchor", new Vector4(0f, 0f, -1f));
+			if(constantNode != null)
+				shader.SetVector("Constant", new Vector4(constantNode.transform.position.x, constantNode.transform.position.y, 0f));
+			else
+				shader.SetVector("Constant", new Vector4(0f, 0f, -1f));
+		}	
 
 
 
 	}
 
+	Node CreateNode(Node.Type type, int touchID = 0)
+    {
+		bool pole = type == Node.Type.Pole;
+		bool zero = type == Node.Type.Zero;
+		bool anchor = type == Node.Type.Anchor;
+		bool constant = type == Node.Type.Constant;
+
+		Color colToUse = zero ? colors[0] : pole ? colors[1] : anchor ? colors[2] : colors[3];
+
+		if (pole && poles.Count >= maxNodes) return null;
+		if (zero && zeroes.Count >= maxNodes) return null;
+		if (anchor && anchorNode != null) return null;
+		if (constant && constantNode != null) return null;
+
+		var node = Instantiate(nodeTemplate);
+		node.sprite.color = colToUse;
+		node.SetType(type);
+		if(USE_TOUCH_INPUT)
+        {
+			node.touchID = touchID;
+			node.SetVisible(false);
+        }
+		if (pole)
+			poles.Add(node);
+		else if (zero)
+			zeroes.Add(node);
+		else if (anchor)
+			anchorNode = node;
+		else if (constant)
+			constantNode = node;
+		return node;
+	}
+	void RemoveNode(Node node)
+    {
+		if (node.type == Node.Type.Pole)
+			poles.Remove(node);
+		else if (node.type == Node.Type.Zero)
+			zeroes.Remove(node);
+		else if (node.type == Node.Type.Anchor)
+			anchorNode = null;
+		else if (node.type == Node.Type.Constant)
+			constantNode = null;
+
+		Destroy(node.gameObject);
+	}
     private void OnDestroy()
     {
 		zeroBuffer.Release();
@@ -141,13 +229,7 @@ public class Plotter : MonoBehaviour
     }
 	void UpdateBuffer(bool zero)
     {
-			var listToUse = zero ? zeroes : poles;
-		float[] newBuffer = new float[listToUse.Count * 2];
-		for (int i = 0; i < listToUse.Count; i++)
-		{
-			newBuffer[i*2] = listToUse[i].transform.position.x;
-			newBuffer[i * 2 + 1] = listToUse[i].transform.position.y;
-		}
+		var newBuffer = GetBufferArray(zero);
 		if (zero)
 		{
 			//zeroBuffer.Release();
@@ -159,55 +241,17 @@ public class Plotter : MonoBehaviour
 			poleBuffer.SetData(newBuffer);
 		}
     }
-
-	/*
-	 * code for adder / multipliers
-bool adder = Input.GetKeyDown(KeyCode.A);
-bool multiplier = Input.GetKeyDown(KeyCode.M);
-Color colToUse = adder ? colors[0] : colors[1];
-if (adder || multiplier)
-{
-	var node = Instantiate(nodeTemplate);
-	node.sprite.color = colToUse;
-	nodes.Add(node);
-
-	var line = Instantiate(lineTemplate);
-	line.lr.startColor = line.lr.endColor = colToUse;
-	line.n1 = node;
-	lines.Add(line);
-
-	var node2 = Instantiate(nodeTemplate);
-	node2.sprite.color = colToUse;
-	nodes.Add(node2);
-
-	var line2 = Instantiate(lineTemplate);
-	line2.lr.startColor = line2.lr.endColor = colToUse;
-	line2.n1 = node2;
-	lines.Add(line2);
-
-	var combineNode = Instantiate(nodeTemplate);
-	combineNode.sprite.color = colToUse;
-	if(adder)
-	{
-		combineNode.SetType(Node.Type.Adder, node, node2);
-		var line3 = Instantiate(lineTemplate);
-		line3.lr.startColor = line3.lr.endColor = colToUse;
-		line3.n1 = node; line3.n2 = combineNode;
-		var line4 = Instantiate(lineTemplate);
-		line4.lr.startColor = line4.lr.endColor = colToUse;
-		line4.n1 = node2; line4.n2 = combineNode;
-		lines.Add(line3); lines.Add(line4);
-	} else if(multiplier)
-	{
-		combineNode.SetType(Node.Type.Multiplier, node, node2);
-		var line5 = Instantiate(lineTemplate);
-		line5.lr.startColor = line5.lr.endColor = colToUse;
-		line5.n1 = combineNode;
-		lines.Add(line5);
+	float[] GetBufferArray(bool zero)
+    {
+		var listToUse = zero ? zeroes : poles;
+		float[] newBuffer = new float[maxNodes * 2];
+		for (int i = 0; i < listToUse.Count; i++)
+		{
+			newBuffer[i * 2] = listToUse[i].transform.position.x;
+			newBuffer[i * 2 + 1] = listToUse[i].transform.position.y;
+		}
+		return newBuffer;
 	}
-	nodes.Add(combineNode);
-}
-*/
 	ComplexNumber Derivative(ComplexNumber z)
     {
         float aX = 0f, aY = 0f, bX = 0f, bY = 0f, cX = 0f, cY = 0f;
@@ -217,5 +261,25 @@ if (adder || multiplier)
 
 		return (((a * (c - b)) + (b * c)) + (z * (z - (2f * c)))) / ComplexNumber.Pow(2, z - c);
     }
+
+	public static Node CreateNodeFromButton(Node.Type type)
+    {
+		return instance.CreateNode(type);
+    }
+
+	public static void RemoveNodeFromDrag(Node node)
+    {
+		instance.RemoveNode(node);
+    }
+
+	public static void ChangeContourFromButton(int delta)
+    {
+		instance.contourLevel = Mathf.Clamp(instance.contourLevel + delta, 0, 10);
+    }
+	public static void ChangeTextureFromButton(bool val)
+	{
+		instance.useTexture = val;
+		poleMoved = true;
+	}
 }
 
