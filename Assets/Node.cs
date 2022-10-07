@@ -61,13 +61,12 @@ public class Node : MonoBehaviour
 		value = new ComplexNumber(newPos.x, newPos.y);
 		if (type == Type.Pole) Plotter.poleMoved = true;
 		else if (type == Type.Zero) Plotter.zeroMoved = true;
-		else if (type == Type.Anchor) Plotter.anchorMoved = true;
-		else if (type == Type.Constant) Plotter.constantMoved = true;
 	}
     private void OnMouseDown()
     {
 		if (Plotter.USE_TOUCH_INPUT)
 			return;
+		if (!Plotter.canManipulateNodes) return;
 
 		SetDragged(true);
     }

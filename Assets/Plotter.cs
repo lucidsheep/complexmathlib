@@ -27,22 +27,31 @@ public class Plotter : MonoBehaviour
 	[Range(0, 10)]
 	public int contourLevel = 0;
 	public bool useTexture = false;
+	//[Range(-10.0f, 10.0f)]
+	public ComplexNumber Anchor;
+	public ComplexNumber Scatter;
+	public bool alwaysUpdate = false;
 	public PixelStyle pixelStyle = PixelStyle.Fill;
 
 	bool[] touchesDown;
 	int lastZoom;
 	int lastContour;
 	PixelStyle lastStyle;
-	Node anchorNode;
-	Node constantNode;
+
+	ComplexNumber startAnchorDragValue;
+	public bool anchorDragMode = false;
+	bool anchorDragInProgress = false;
+
+	ComplexNumber startScatterDragValue;
+	public bool scatterDragMode = false;
+	bool scatterDragInProgress = false;
 
 	ComputeBuffer poleBuffer, zeroBuffer;
 	Texture2D oldTex;
 	public static bool poleMoved = false;
 	public static bool zeroMoved = false;
-	public static bool anchorMoved = false;
-	public static bool constantMoved = false;
 	public static int maxNodes = 8;
+
 
     private void Awake()
     {
@@ -84,6 +93,42 @@ public class Plotter : MonoBehaviour
 		bool zoom = lastZoom != pixelZoomLevel;
 		bool contour = lastContour != contourLevel;
 		bool style = lastStyle != pixelStyle;
+		//todo - probably does not work in touch mode
+		if(anchorDragMode)
+        {
+			var newPos = Camera.main.ScreenToWorldPoint(Input.mousePosition);
+			if (Input.GetMouseButtonDown(0)) //begin drag, solve for cur position
+            {
+				startAnchorDragValue = myFunction(new ComplexNumber(newPos.x, newPos.y));
+				anchorDragInProgress = true;
+			} else if(anchorDragInProgress)
+            {
+				var curAnchorDragValue = startAnchorDragValue / (myFunction(new ComplexNumber(newPos.x, newPos.y)));
+				Anchor = Anchor * curAnchorDragValue;
+				if (Input.GetMouseButtonUp(0)) //end drag
+                {
+					anchorDragInProgress = false;
+                }
+			}
+        }
+		if(scatterDragMode)
+        {
+			var newPos = Camera.main.ScreenToWorldPoint(Input.mousePosition);
+			if (Input.GetMouseButtonDown(0)) //begin drag, solve for cur position
+			{
+				startScatterDragValue = myFunction(new ComplexNumber(newPos.x, newPos.y));
+				scatterDragInProgress = true;
+			}
+			else if (scatterDragInProgress)
+			{
+				var curScatterDragValue = startScatterDragValue - (myFunction(new ComplexNumber(newPos.x, newPos.y)));
+				Scatter = Scatter + curScatterDragValue;
+				if (Input.GetMouseButtonUp(0)) //end drag
+				{
+					scatterDragInProgress = false;
+				}
+			}
+		}
 		if (USE_TOUCH_INPUT)
 		{
 			Dictionary<int, Node> existingTouches = new Dictionary<int, Node>();
@@ -146,9 +191,9 @@ public class Plotter : MonoBehaviour
 			lastContour = contourLevel;
 		if (style)
 			lastStyle = pixelStyle;
-		if (poleMoved || zeroMoved || anchorMoved || constantMoved ||  pole || zero || zoom || contour || style)
+		if (alwaysUpdate || poleMoved || zeroMoved || pole || zero || zoom || contour || style)
 		{
-			poleMoved = zeroMoved = anchorMoved = constantMoved = false;
+			poleMoved = zeroMoved = false;
 			shader.SetInteger("InputSize", resolution);
 			shader.SetFloatArray("Poles", GetBufferArray(false));
 			shader.SetFloatArray("Zeroes", GetBufferArray(true));
@@ -158,14 +203,8 @@ public class Plotter : MonoBehaviour
 			shader.SetInt("PixelStyle", (int)pixelStyle);
 			shader.SetInt("UseTexture", useTexture ? 1 : 0);
 			shader.SetFloat("Contours", contourLevel == 0 ? 0f : 2f - ((contourLevel - 1) * .1f));
-			if (anchorNode != null)
-				shader.SetVector("Anchor", new Vector4(anchorNode.transform.position.x, anchorNode.transform.position.y, 0f));
-			else
-				shader.SetVector("Anchor", new Vector4(0f, 0f, -1f));
-			if(constantNode != null)
-				shader.SetVector("Constant", new Vector4(constantNode.transform.position.x, constantNode.transform.position.y, 0f));
-			else
-				shader.SetVector("Constant", new Vector4(0f, 0f, -1f));
+			shader.SetVector("Anchor", new Vector4(Anchor.r, Anchor.i, 0f));
+			shader.SetVector("Scatter", new Vector4(Scatter.r, Scatter.i, 0f));
 		}	
 
 
@@ -174,17 +213,15 @@ public class Plotter : MonoBehaviour
 
 	Node CreateNode(Node.Type type, int touchID = 0)
     {
+		if (!canManipulateNodes) return null;
+
 		bool pole = type == Node.Type.Pole;
 		bool zero = type == Node.Type.Zero;
-		bool anchor = type == Node.Type.Anchor;
-		bool constant = type == Node.Type.Constant;
 
-		Color colToUse = zero ? colors[0] : pole ? colors[1] : anchor ? colors[2] : colors[3];
+		Color colToUse = zero ? colors[0] : pole ? colors[1] : colors[2];
 
 		if (pole && poles.Count >= maxNodes) return null;
 		if (zero && zeroes.Count >= maxNodes) return null;
-		if (anchor && anchorNode != null) return null;
-		if (constant && constantNode != null) return null;
 
 		var node = Instantiate(nodeTemplate);
 		node.sprite.color = colToUse;
@@ -198,22 +235,16 @@ public class Plotter : MonoBehaviour
 			poles.Add(node);
 		else if (zero)
 			zeroes.Add(node);
-		else if (anchor)
-			anchorNode = node;
-		else if (constant)
-			constantNode = node;
 		return node;
 	}
 	void RemoveNode(Node node)
     {
+		if (!canManipulateNodes) return;
+
 		if (node.type == Node.Type.Pole)
 			poles.Remove(node);
 		else if (node.type == Node.Type.Zero)
 			zeroes.Remove(node);
-		else if (node.type == Node.Type.Anchor)
-			anchorNode = null;
-		else if (node.type == Node.Type.Constant)
-			constantNode = null;
 
 		Destroy(node.gameObject);
 	}
@@ -262,6 +293,29 @@ public class Plotter : MonoBehaviour
 		return (((a * (c - b)) + (b * c)) + (z * (z - (2f * c)))) / ComplexNumber.Pow(2, z - c);
     }
 
+	public ComplexNumber myFunction(ComplexNumber z)
+    {
+
+		if (zeroes.Count == 0)
+			return z * Anchor + Scatter;
+
+		ComplexNumber numerator = z - zeroes[0].value;
+
+		for (var i = 1; i < zeroes.Count; i++)
+		{
+			numerator = numerator * (z - zeroes[i].value);
+		}
+		if (poles.Count == 0)
+			return numerator * Anchor + Scatter;
+
+		ComplexNumber denom = z - poles[0].value;
+		for (var j = 1; j < poles.Count; j++)
+		{
+			denom = denom * (z - poles[j].value);
+		}
+		return ((numerator / denom) * Anchor) + Scatter;
+
+	}
 	public static Node CreateNodeFromButton(Node.Type type)
     {
 		return instance.CreateNode(type);
@@ -281,5 +335,11 @@ public class Plotter : MonoBehaviour
 		instance.useTexture = val;
 		poleMoved = true;
 	}
+
+	public static bool canManipulateNodes { get {
+
+			return !(instance.scatterDragMode || instance.anchorDragMode);
+		}
+    }
 }
 

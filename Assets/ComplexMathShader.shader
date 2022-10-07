@@ -100,14 +100,14 @@ float Contours;
 float Zeroes[16];
 float Poles[16];
 float4 Anchor;
-float4 Constant;
+float4 Scatter;
 uint UseTexture;
 
 float2 myFunction(float2 z)
 {
 
     if(NumZeroes == 0)
-        return z;
+        return prod(float2(Anchor.x, Anchor.y), z) + float2(Scatter.x, Scatter.y);
 
     float2 numerator = z - float2(Zeroes[0], Zeroes[1]);
 
@@ -116,14 +116,14 @@ float2 myFunction(float2 z)
         numerator = prod(numerator, (z - float2(Zeroes[i], Zeroes[i+1])));
     }
     if(NumPoles == 0)
-        return numerator;
+        return prod(float2(Anchor.x, Anchor.y), numerator) + float2(Scatter.x, Scatter.y);
 
     float2 denom = z - float2(Poles[0], Poles[1]); 
     for(uint j = 2; j < NumPoles * 2; j += 2)
     {
         denom = prod(denom, (z - float2(Poles[j], Poles[j+1])));
     }
-    return div(numerator, denom);
+    return prod(float2(Anchor.x, Anchor.y), div(numerator, denom)) + float2(Scatter.x, Scatter.y);
 
 }
 
@@ -195,10 +195,6 @@ float2 vertexToXY(float4 vertex)
 				} else
 				{
 					float2 pixelXY = vertexToXY(IN.screenPos);
-					if(Anchor.z >= 0.0)
-						pixelXY = prod(pixelXY, float2(Anchor.x, Anchor.y));
-					if(Constant.z >= 0.0)
-						pixelXY += float2(Constant.x, Constant.y);
 					//float2 pixelXY = float2(((uint)id.x / (uint)PixelZoom) * (float)PixelZoom, ((uint)id.y / (uint)PixelZoom) * (float)PixelZoom);
 					
 					float3 color = getColor(pixelXY);

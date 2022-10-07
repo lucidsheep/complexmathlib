@@ -344,7 +344,16 @@ MonoBehaviour:
   pixelZoomLevel: 1
   contourLevel: 0
   useTexture: 0
+  Anchor:
+    r: 1
+    i: 0
+  Scatter:
+    r: 0
+    i: 0
+  alwaysUpdate: 1
   pixelStyle: 0
+  anchorDragMode: 0
+  scatterDragMode: 0
 --- !u!4 &316606856
 Transform:
   m_ObjectHideFlags: 0
@@ -1249,5 +1258,6 @@ PrefabInstance:
       propertyPath: m_Name
       value: TextureButton
       objectReference: {fileID: 0}
-    m_RemovedComponents: []
+    m_RemovedComponents:
+    - {fileID: 1568023845305069593, guid: 20fcebf5de9464fb6a251bef9703a7de, type: 3}
   m_SourcePrefab: {fileID: 100100000, guid: 20fcebf5de9464fb6a251bef9703a7de, type: 3}
