@@ -29,6 +29,42 @@ namespace ComplexMathLib
             return r + (i < 0f ? " - " + (i * -1) : " + " + i) + "i";
         }
 
+        public static ComplexNumber NormalizeLinear(ComplexNumber input)
+        {
+            var r = input.r;
+            var i = input.i;
+            while (r < -1f)
+                r += 2f;
+            while (r > 1f)
+                r -= 2f;
+            while (i < -1f)
+                i += 2f;
+            while (i > 1f)
+                i += 2f;
+
+            return new ComplexNumber(r, i);
+        }
+
+        public ComplexNumber NormalizeLinear()
+        {
+            return NormalizeLinear(this);
+        }
+        public static ComplexNumber NormalizeScalar(ComplexNumber input, float limit = 1f)
+        {
+            float rAbs = Mathf.Abs(input.r);
+            float iAbs = Mathf.Abs(input.i);
+            float larger = rAbs > iAbs ? rAbs : iAbs;
+            if(larger > limit)
+            {
+                float scale = limit / larger;
+                return new ComplexNumber(input.r * scale, input.i * scale);
+            }
+            return input;
+        }
+        public ComplexNumber NormalizeScalar(float limit = 1f)
+        {
+            return NormalizeScalar(this, limit);
+        }
         public static implicit operator float(ComplexNumber d) => d.r;
         public static implicit operator ComplexNumber(float f) => new ComplexNumber(f);
 
@@ -47,7 +83,8 @@ namespace ComplexMathLib
         public static ComplexNumber operator / (ComplexNumber lhs, ComplexNumber rhs)
         {
             var denom = (rhs.r * rhs.r) + (rhs.i * rhs.i);
-            if (denom == 0f) return float.NaN;
+            if (denom == 0f)
+                denom = 0.000001f; //avoid crashes, should really be NaN
             return new ComplexNumber(((lhs.r * rhs.r) + (lhs.i * rhs.i)) / denom, ((lhs.i *rhs.r)-(lhs.r*rhs.i))/denom);
         }
 

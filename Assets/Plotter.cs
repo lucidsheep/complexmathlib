@@ -46,6 +46,8 @@ public class Plotter : MonoBehaviour
 	public bool scatterDragMode = false;
 	bool scatterDragInProgress = false;
 
+	public static bool inScatterMode { get { return instance.scatterDragMode; } }
+	public static bool inAnchorMode { get { return instance.anchorDragMode; } }
 	ComputeBuffer poleBuffer, zeroBuffer;
 	Texture2D oldTex;
 	public static bool poleMoved = false;
@@ -105,6 +107,9 @@ public class Plotter : MonoBehaviour
             {
 				var curAnchorDragValue = startAnchorDragValue / (myFunction(new ComplexNumber(newPos.x, newPos.y)));
 				Anchor = Anchor * curAnchorDragValue;
+				Anchor = Anchor.NormalizeScalar(1000f);
+				if (Mathf.Abs(Anchor.r) < 0.000001f && Mathf.Abs(Anchor.i) < 0.000001f)
+					Anchor.r = 0.000001f; //avoid zeroing out anchor entirely
 				if (Input.GetMouseButtonUp(0)) //end drag
                 {
 					anchorDragInProgress = false;
@@ -123,6 +128,7 @@ public class Plotter : MonoBehaviour
 			{
 				var curScatterDragValue = startScatterDragValue - (myFunction(new ComplexNumber(newPos.x, newPos.y)));
 				Scatter = Scatter + curScatterDragValue;
+				//Scatter = Scatter.NormalizeLinear();
 				if (Input.GetMouseButtonUp(0)) //end drag
 				{
 					scatterDragInProgress = false;
@@ -335,6 +341,16 @@ public class Plotter : MonoBehaviour
 		instance.useTexture = val;
 		poleMoved = true;
 	}
+
+	public static void ChangeAnchorModeFromButton(bool val)
+    {
+		instance.anchorDragMode = val;
+    }
+
+	public static void ChangeScatterModeFromButton(bool val)
+    {
+		instance.scatterDragMode = val;
+    }
 
 	public static bool canManipulateNodes { get {
 

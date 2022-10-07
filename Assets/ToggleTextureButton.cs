@@ -8,5 +8,6 @@ public class ToggleTextureButton : ToggleButton
         base.OnToggle();
         Plotter.ChangeTextureFromButton(val);
     }
+
 }
 

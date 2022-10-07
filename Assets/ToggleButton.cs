@@ -9,8 +9,6 @@ public class ToggleButton : MonoBehaviour
 	protected bool val = false;
     private void OnMouseDown()
     {
-        val = !val;
-        label.text = val ? "o" : "x";
         OnToggle();
     }
 
@@ -20,7 +18,13 @@ public class ToggleButton : MonoBehaviour
     }
     virtual protected void OnToggle()
     {
+        val = !val;
+        OnValChange();
+    }
 
+    virtual protected void OnValChange()
+    {
+        label.text = val ? "o" : "x";
     }
 }
 
