@@ -10,12 +10,12 @@ public class Plotter : MonoBehaviour
 	static Plotter instance;
 
 	public enum PixelStyle { Fill, Circles, Squares }
+	public CMPuzzle currentPuzzle;
 	public SpriteRenderer graph;
 	Material shader { get { return graph.material; } }
 	public Node nodeTemplate;
 	public Line lineTemplate;
 	public Color[] colors;
-	public ComplexNumber A, B, C;
 	public List<Node> zeroes;
 	public List<Node> poles;
 
@@ -27,16 +27,10 @@ public class Plotter : MonoBehaviour
 	[Range(0, 10)]
 	public int contourLevel = 0;
 	public bool useTexture = false;
-	//[Range(-10.0f, 10.0f)]
 	public ComplexNumber Anchor;
 	public ComplexNumber Scatter;
 	public bool alwaysUpdate = false;
 	public PixelStyle pixelStyle = PixelStyle.Fill;
-
-	bool[] touchesDown;
-	int lastZoom;
-	int lastContour;
-	PixelStyle lastStyle;
 
 	ComplexNumber startAnchorDragValue;
 	public bool anchorDragMode = false;
@@ -48,12 +42,17 @@ public class Plotter : MonoBehaviour
 
 	public static bool inScatterMode { get { return instance.scatterDragMode; } }
 	public static bool inAnchorMode { get { return instance.anchorDragMode; } }
+	//zeroes and poles are stored as buffers to send to the shader
+	//each is an array of floats, every two floats is a pair that represents the (r,i) of a pole or buffer
+	//[.5, -.5, 0, 2] = two complex numbers, (.5 - .5i) and (2i)
 	ComputeBuffer poleBuffer, zeroBuffer;
-	Texture2D oldTex;
+
 	public static bool poleMoved = false;
 	public static bool zeroMoved = false;
 	public static int maxNodes = 8;
 
+	RenderTexture rt;
+	Texture2D rtCanvas;
 
     private void Awake()
     {
@@ -61,12 +60,9 @@ public class Plotter : MonoBehaviour
     }
     void Start()
 	{
-		ComplexNumber x = new ComplexNumber(); //r = 0; i = 0;
-		ComplexNumber y = new ComplexNumber(3f, -1f); //r = 3 i = -1
-		ComplexNumber z = 3f; //r = 3f i = 0
-		z.i = 5f;
-		z.Pow(2);
-
+		rt = new RenderTexture(Camera.main.pixelWidth, Camera.main.pixelHeight, 24);
+		rtCanvas = new Texture2D(Camera.main.pixelWidth, Camera.main.pixelHeight, TextureFormat.RGB24, false);
+		Debug.Log("res " +rt.width + " x " + rt.height);
 		zeroes = new List<Node>();
 		poles = new List<Node>();
 
@@ -77,24 +73,39 @@ public class Plotter : MonoBehaviour
 		poleBuffer.SetData(new float[] { });
 
 		poleMoved = zeroMoved = true; //force initial update
-		lastZoom = pixelZoomLevel;
-		lastContour = contourLevel;
-		lastStyle = pixelStyle;
-		touchesDown = new bool[10];
-		for (int i = 0; i < 10; i++)
-			touchesDown[i] = false;
 
-		if (!USE_TOUCH_INPUT)
-			CreateNode(Node.Type.Zero);
+		SetupMaterial();
+
+		if (currentPuzzle != null)
+			currentPuzzle.Setup(this, shader);
+		else if (!USE_TOUCH_INPUT)
+			CreateNode(Node.Type.Zero); //create initial zero in center
 	}
+
+	void SetupMaterial()
+    {
+		//shader values that are set once and not changed every frame (some puzzle types may modify them)
+		shader.SetInt("Rivers", 0);
+		shader.SetFloat("ContourSpeed", 0f);
+    }
 
 	private void Update()
 	{
+		//temporarily move the graph to the top layer so game objects (nodes, obstacles etc) don't interrupt color analysis
+		graph.sortingLayerName = "Render";
+		Camera.main.targetTexture = rt;
+		//re-render the camera onto the renderTexture
+		Camera.main.Render();
+		Camera.main.targetTexture = null;
+		graph.sortingLayerName = "Default";
+
+		//draw the renderTexture onto a separate canvas that can be used to examine color data
+		RenderTexture.active = rt;
+		rtCanvas.ReadPixels(new Rect(0, 0, rt.width, rt.height), 0, 0);
+		RenderTexture.active = null;
+
 		bool zero = false;
 		bool pole = false;
-		bool zoom = lastZoom != pixelZoomLevel;
-		bool contour = lastContour != contourLevel;
-		bool style = lastStyle != pixelStyle;
 		//todo - probably does not work in touch mode
 		if(anchorDragMode)
         {
@@ -107,6 +118,7 @@ public class Plotter : MonoBehaviour
             {
 				var curAnchorDragValue = startAnchorDragValue / (myFunction(new ComplexNumber(newPos.x, newPos.y)));
 				Anchor = Anchor * curAnchorDragValue;
+				//keep ratio of real to imaginary, but constrain to a reasonable number
 				Anchor = Anchor.NormalizeScalar(1000f);
 				if (Mathf.Abs(Anchor.r) < 0.000001f && Mathf.Abs(Anchor.i) < 0.000001f)
 					Anchor.r = 0.000001f; //avoid zeroing out anchor entirely
@@ -135,6 +147,8 @@ public class Plotter : MonoBehaviour
 				}
 			}
 		}
+		//in touch mode, each node is assigned to a finger ID, which it stays attached to
+		//node is destroyed when finger is removed
 		if (USE_TOUCH_INPUT)
 		{
 			Dictionary<int, Node> existingTouches = new Dictionary<int, Node>();
@@ -152,7 +166,6 @@ public class Plotter : MonoBehaviour
 					zero = isZero ? true : zero;
 					pole = isZero ? pole : true;
 					node.OnNodeMoved(touch.position);
-					//existingTouches.Add(touch.fingerId, node);
 				}
 				
 				if (touch.phase == TouchPhase.Ended || touch.phase == TouchPhase.Canceled)
@@ -165,7 +178,6 @@ public class Plotter : MonoBehaviour
 				}
 				else if (touch.phase == TouchPhase.Moved || touch.phase == TouchPhase.Stationary)
 				{
-					//Debug.Log("Moved");
 					node.OnNodeMoved(touch.position);
 					existingTouches.Remove(node.touchID);
 				}
@@ -178,46 +190,29 @@ public class Plotter : MonoBehaviour
 				RemoveNode(kv.Value);
             }
 		}
-		else
-		{
-			zero = Input.GetKeyDown(KeyCode.Z);
-			pole = Input.GetKeyDown(KeyCode.P);
-			if (pole || zero)
-			{
-				CreateNode(zero ? Node.Type.Zero : Node.Type.Pole);
-			}
-		}
+		//only update buffers if a pole or zero was moved / added / removed
 		if (poleMoved || pole)
 			UpdateBuffer(false);
 		if (zeroMoved || zero)
 			UpdateBuffer(true);
-		if (zoom)
-			lastZoom = pixelZoomLevel;
-		if (contour)
-			lastContour = contourLevel;
-		if (style)
-			lastStyle = pixelStyle;
-		if (alwaysUpdate || poleMoved || zeroMoved || pole || zero || zoom || contour || style)
-		{
-			poleMoved = zeroMoved = false;
-			shader.SetInteger("InputSize", resolution);
-			shader.SetFloatArray("Poles", GetBufferArray(false));
-			shader.SetFloatArray("Zeroes", GetBufferArray(true));
-			shader.SetInt("NumZeroes", zeroes.Count);
-			shader.SetInt("NumPoles", poles.Count);
-			shader.SetInt("PixelZoom", Mathf.FloorToInt(Mathf.Pow(2f, pixelZoomLevel - 1)));
-			shader.SetInt("PixelStyle", (int)pixelStyle);
-			shader.SetInt("UseTexture", useTexture ? 1 : 0);
-			shader.SetFloat("Contours", contourLevel == 0 ? 0f : 2f - ((contourLevel - 1) * .1f));
-			shader.SetVector("Anchor", new Vector4(Anchor.r, Anchor.i, 0f));
-			shader.SetVector("Scatter", new Vector4(Scatter.r, Scatter.i, 0f));
-		}	
 
-
+		//update all shader values
+		poleMoved = zeroMoved = false;
+		shader.SetInteger("CanvasSize", resolution);
+		shader.SetFloatArray("Poles", GetBufferArray(false));
+		shader.SetFloatArray("Zeroes", GetBufferArray(true));
+		shader.SetInt("NumZeroes", zeroes.Count);
+		shader.SetInt("NumPoles", poles.Count);
+		shader.SetInt("PixelZoom", Mathf.FloorToInt(Mathf.Pow(2f, pixelZoomLevel - 1)));
+		shader.SetInt("PixelStyle", (int)pixelStyle);
+		shader.SetInt("UseTexture", useTexture ? 1 : 0);
+		shader.SetFloat("Contours", contourLevel == 0 ? 0f : 2f - ((contourLevel - 1) * .1f));
+		shader.SetVector("Anchor", new Vector4(Anchor.r, Anchor.i, 0f));
+		shader.SetVector("Scatter", new Vector4(Scatter.r, Scatter.i, 0f));
 
 	}
 
-	Node CreateNode(Node.Type type, int touchID = 0)
+	public Node CreateNode(Node.Type type, int touchID = 0)
     {
 		if (!canManipulateNodes) return null;
 
@@ -356,6 +351,18 @@ public class Plotter : MonoBehaviour
 
 			return !(instance.scatterDragMode || instance.anchorDragMode);
 		}
+    }
+
+	public static Color GetPixelColor(int x, int y)
+    {
+		return instance.rtCanvas.GetPixel(x, y);
+    }
+
+	public static bool IsActionAllowed(CMPuzzle.PlayerActions action)
+    {
+		if (instance.currentPuzzle == null) return true;
+
+		return instance.currentPuzzle.allowedActions.FindIndex(x => x == action) >= 0;
     }
 }
 

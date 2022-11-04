@@ -15,7 +15,12 @@ public class Node : MonoBehaviour
 	List<Node> sources = new List<Node>();
 	bool beingDragged = false;
 
-	public bool canBeControlled { get { return type == Type.Zero || type == Type.Control || type == Type.Pole || type == Type.Anchor || type == Type.Constant; } }
+	public bool canBeControlled { get {
+			return
+				(Plotter.IsActionAllowed(CMPuzzle.PlayerActions.MovePole) && type == Type.Pole)
+				|| (Plotter.IsActionAllowed(CMPuzzle.PlayerActions.MoveZero) && type == Type.Zero)
+				|| (Plotter.IsActionAllowed(CMPuzzle.PlayerActions.MoveAnchor) && type == Type.Anchor)
+				|| (Plotter.IsActionAllowed(CMPuzzle.PlayerActions.MoveScatter) && type == Type.Constant); } }
 	// Use this for initialization
 	void Awake()
 	{
@@ -50,7 +55,8 @@ public class Node : MonoBehaviour
 
 		if (cachedValue != value)
 		{
-			transform.position = position;
+			GetComponent<Rigidbody2D>().MovePosition(position);
+			//transform.position = position;
 			cachedValue = value;
 		}
 	}
@@ -91,7 +97,9 @@ public class Node : MonoBehaviour
 		if (!newDrag && Mathf.Max(Mathf.Abs(transform.position.x), Mathf.Abs(transform.position.y)) > .8f)
 		{
 			//remove nodes dragged out of canvas
-			Plotter.RemoveNodeFromDrag(this);
+			if ((type == Type.Pole && Plotter.IsActionAllowed(CMPuzzle.PlayerActions.DeletePole))
+				|| (type == Type.Zero && Plotter.IsActionAllowed(CMPuzzle.PlayerActions.DeleteZero)))
+				Plotter.RemoveNodeFromDrag(this);
 		}
 	}
 

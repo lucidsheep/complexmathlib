@@ -11,7 +11,7 @@ TagManager:
   - 
   - Water
   - UI
-  - 
+  - Nodes
   - 
   - 
   - 
@@ -41,6 +41,12 @@ TagManager:
   - name: Default
     uniqueID: 0
     locked: 0
+  - name: UI
+    uniqueID: 4124442815
+    locked: 0
   - name: Sprite
     uniqueID: 439311531
+    locked: 0
+  - name: Render
+    uniqueID: 3439234677
     locked: 0
