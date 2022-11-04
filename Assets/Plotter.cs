@@ -14,7 +14,6 @@ public class Plotter : MonoBehaviour
 	public SpriteRenderer graph;
 	Material shader { get { return graph.material; } }
 	public Node nodeTemplate;
-	public Line lineTemplate;
 	public Color[] colors;
 	public List<Node> zeroes;
 	public List<Node> poles;
@@ -352,7 +351,7 @@ public class Plotter : MonoBehaviour
 
 	public static Color GetPixelColor(int x, int y)
     {
-		return instance.rtCanvas.GetPixel(x, y);
+		return instance.rtCanvas.GetPixel(x, 512 - y);
     }
 
 	public static bool IsActionAllowed(CMPuzzle.PlayerActions action)

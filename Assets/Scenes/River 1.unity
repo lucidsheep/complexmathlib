@@ -322,25 +322,13 @@ MonoBehaviour:
   currentPuzzle: {fileID: 11400000, guid: 0ab20ae247cfa42d29146e1d3f0f5caf, type: 2}
   graph: {fileID: 1832408872}
   nodeTemplate: {fileID: 8782512518249582973, guid: 9c0ba10ae5b864b35b73b171096a88ed, type: 3}
-  lineTemplate: {fileID: -4249854968357762301, guid: 60e147eb8a3804819ac0dafd8ddc5a05, type: 3}
   colors:
   - {r: 0.06341223, g: 0.6656054, b: 0.7075472, a: 1}
   - {r: 0.7830189, g: 0.21052866, b: 0.21052866, a: 1}
   - {r: 0.8867924, g: 0.54266983, b: 0.15477037, a: 1}
   - {r: 0.5254902, g: 0.15294118, b: 0.8862745, a: 1}
-  A:
-    r: 2.34
-    i: 2
-  B:
-    r: -4.8
-    i: 18
-  C:
-    r: 4.4
-    i: -3.99
   zeroes: []
   poles: []
-  lines: []
-  graphPixels: {fileID: 0}
   resolution: 512
   pixelZoomLevel: 1
   contourLevel: 0
@@ -351,7 +339,6 @@ MonoBehaviour:
   Scatter:
     r: 0
     i: 0
-  alwaysUpdate: 1
   pixelStyle: 0
   anchorDragMode: 0
   scatterDragMode: 0
@@ -525,7 +512,7 @@ SpriteRenderer:
   m_AutoUVMaxAngle: 89
   m_LightmapParameters: {fileID: 0}
   m_SortingLayerID: 439311531
-  m_SortingLayer: 1
+  m_SortingLayer: 2
   m_SortingOrder: -1
   m_Sprite: {fileID: 7482667652216324306, guid: 311925a002f4447b3a28927169b83ea6, type: 3}
   m_Color: {r: 0.5471698, g: 0.5471698, b: 0.5471698, a: 1}
@@ -656,7 +643,7 @@ SpriteRenderer:
   m_AutoUVMaxAngle: 89
   m_LightmapParameters: {fileID: 0}
   m_SortingLayerID: 439311531
-  m_SortingLayer: 1
+  m_SortingLayer: 2
   m_SortingOrder: 0
   m_Sprite: {fileID: 3625043607559282579, guid: 045b15ec09bba42448d89db77fa6f20a, type: 3}
   m_Color: {r: 0.5313507, g: 0.8584906, b: 0.33610713, a: 1}
@@ -1023,7 +1010,7 @@ MeshRenderer:
   m_AutoUVMaxAngle: 89
   m_LightmapParameters: {fileID: 0}
   m_SortingLayerID: 439311531
-  m_SortingLayer: 1
+  m_SortingLayer: 2
   m_SortingOrder: 2
   m_AdditionalVertexStreams: {fileID: 0}
 --- !u!224 &1438608802
@@ -1117,7 +1104,7 @@ SpriteRenderer:
   m_AutoUVMaxAngle: 89
   m_LightmapParameters: {fileID: 0}
   m_SortingLayerID: 439311531
-  m_SortingLayer: 1
+  m_SortingLayer: 2
   m_SortingOrder: 0
   m_Sprite: {fileID: 3625043607559282579, guid: 045b15ec09bba42448d89db77fa6f20a, type: 3}
   m_Color: {r: 0.6886792, g: 0.519416, b: 0.15267888, a: 1}
@@ -1480,7 +1467,7 @@ MeshRenderer:
   m_AutoUVMaxAngle: 89
   m_LightmapParameters: {fileID: 0}
   m_SortingLayerID: 439311531
-  m_SortingLayer: 1
+  m_SortingLayer: 2
   m_SortingOrder: 2
   m_AdditionalVertexStreams: {fileID: 0}
 --- !u!224 &1988842106
