@@ -26,7 +26,6 @@ public class Plotter : MonoBehaviour
 	public bool useTexture = false;
 	public ComplexNumber Anchor;
 	public ComplexNumber Scatter;
-	public bool alwaysUpdate = false;
 	public PixelStyle pixelStyle = PixelStyle.Fill;
 
 	ComplexNumber startAnchorDragValue;
@@ -281,6 +280,7 @@ public class Plotter : MonoBehaviour
 		}
 		return newBuffer;
 	}
+
 	ComplexNumber Derivative(ComplexNumber z)
     {
         float aX = 0f, aY = 0f, bX = 0f, bY = 0f, cX = 0f, cY = 0f;
