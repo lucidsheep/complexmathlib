@@ -18,9 +18,6 @@ public class Plotter : MonoBehaviour
 	public Color[] colors;
 	public List<Node> zeroes;
 	public List<Node> poles;
-
-	public List<Line> lines;
-	public RawImage graphPixels;
 	public int resolution = 512;
 	[Range(1, 8)]
 	public int pixelZoomLevel = 1;
